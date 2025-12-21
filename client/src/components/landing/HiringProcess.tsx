@@ -72,7 +72,7 @@ export default function HiringProcess() {
                                     <div className="w-12 h-12 bg-[#00c853]/10 rounded-xl flex items-center justify-center">
                                         <item.icon className="w-6 h-6 text-[#00c853]" />
                                     </div>
-                                    <span className="text-4xl font-bold text-gray-100">{item.step}</span>
+                                    <span className="text-4xl font-bold text-gray-400 opacity-50">{item.step}</span>
                                 </div>
                                 <h3 className="text-lg font-semibold text-[#1a1a2e] mb-2">
                                     {item.title}
