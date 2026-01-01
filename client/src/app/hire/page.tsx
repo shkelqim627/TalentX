@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, CreditCard, Shield, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 
-export default function HirePage() {
+function HireContent() {
     const searchParams = useSearchParams();
     const dispatch = useDispatch();
     const router = useRouter();
@@ -325,5 +325,17 @@ export default function HirePage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function HirePage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-[#204ecf] border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <HireContent />
+        </Suspense>
     );
 }
