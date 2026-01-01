@@ -5,13 +5,19 @@ export interface User {
     email: string;
     full_name: string;
     role: UserRole;
+    status: 'active' | 'disabled';
     avatar_url?: string;
+    rateType?: 'hourly' | 'monthly';
+    rateAmount?: number;
+    createdAt?: string;
+    talent?: { id: string };
+    agency?: { id: string };
 }
 
 export interface Message {
     id: string;
-    sender_id: string;
-    receiver_id: string; // Can be a user ID or 'support'
+    senderId: string;
+    receiverId: string;
     content: string;
     timestamp: string;
     read: boolean;
@@ -124,6 +130,7 @@ export interface Project {
     team_members?: User[];
     assigned_to?: {
         id: string;
+        userId?: string;
         name: string;
         type: 'talent' | 'team' | 'agency';
         image_url?: string;
@@ -140,7 +147,11 @@ export interface Task {
     title: string;
     description?: string;
     status: 'todo' | 'in_progress' | 'review' | 'done';
-    assignee?: string; // User ID
+    assignee?: {
+        id: string;
+        full_name: string;
+        avatar_url?: string;
+    };
     priority: 'low' | 'medium' | 'high';
     due_date?: string;
 }

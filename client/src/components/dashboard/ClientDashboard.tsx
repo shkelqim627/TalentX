@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Project } from '@/types';
 import { Button } from "@/components/ui/button";
-import { Plus, Bell, LogOut, Briefcase, MessageSquare, Users, Settings, Search, X } from 'lucide-react';
+import { Plus, Bell, LogOut, Briefcase, MessageSquare, Users, Settings, Search, X, BarChart } from 'lucide-react';
 import Link from 'next/link';
 import { createPageUrl } from '@/utils';
 import ProjectList from './ProjectList';
@@ -9,22 +9,37 @@ import ProjectDetail from './ProjectDetail';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { talentXApi } from '@/api/talentXApi';
 import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
+import NotificationCenter from './NotificationCenter';
 
 interface ClientDashboardProps {
     user: User;
     onLogout: () => void;
     activeView: string;
     setActiveView: (view: any) => void;
-    MessagesView: React.ComponentType;
+    MessagesView: React.ComponentType<{ user: User }>;
     HireView: React.ComponentType;
+    SettingsView: React.ComponentType;
+    ClientOverview: React.ComponentType;
 }
 
-export default function ClientDashboard({ user, onLogout, activeView, setActiveView, MessagesView, HireView }: ClientDashboardProps) {
+export default function ClientDashboard({ user, onLogout, activeView, setActiveView, MessagesView, HireView, SettingsView, ClientOverview }: ClientDashboardProps) {
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDescription, setNewProjectDescription] = useState('');
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
     const queryClient = useQueryClient();
+    const searchParams = useSearchParams();
+
+    // Listen for deep links
+    React.useEffect(() => {
+        const projectParam = searchParams.get('project');
+        if (projectParam) {
+            setSelectedProjectId(projectParam);
+        }
+    }, [searchParams]);
 
     // Projects Query
     const { data: projects = [], isLoading } = useQuery({
@@ -46,14 +61,11 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
     const createProjectMutation = useMutation({
         mutationFn: async (newProject: Partial<Project>) => {
             return await talentXApi.entities.Project.create({
-                ...newProject,
+                name: newProject.name,
+                description: newProject.description,
                 client_email: user.email,
-                clientId: user.id,
-                status: 'active',
-                progress: 0,
-                budget_spent: 0,
-                start_date: new Date().toISOString()
-            } as any);
+                clientId: user.id
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['projects', user.id] });
@@ -69,14 +81,82 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
         }
     });
 
-    const handleCreateProject = (e: React.FormEvent) => {
+
+
+    // Update Project Mutation
+    const updateProjectMutation = useMutation({
+        mutationFn: async (data: Partial<Project>) => {
+            if (!editingProjectId) return;
+            return await talentXApi.entities.Project.update(editingProjectId, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['projects', user.id] });
+            setIsNewProjectModalOpen(false);
+            setNewProjectName('');
+            setNewProjectDescription('');
+            setIsEditMode(false);
+            setEditingProjectId(null);
+            toast.success('Project updated successfully!');
+        },
+        onError: (error: any) => {
+            console.error('Project update failed:', error);
+            const message = error.response?.data?.message || 'Failed to update project';
+            toast.error(message);
+        }
+    });
+
+    // Delete Project Mutation
+    const deleteProjectMutation = useMutation({
+        mutationFn: async (projectId: string) => {
+            return await talentXApi.entities.Project.delete(projectId);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['projects', user.id] });
+            toast.success('Project deleted successfully!');
+        },
+        onError: (error: any) => {
+            console.error('Project deletion failed:', error);
+            const message = error.response?.data?.message || 'Failed to delete project';
+            toast.error(message);
+        }
+    });
+
+    const handleCreateOrUpdateProject = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newProjectName.trim()) return;
-        createProjectMutation.mutate({
-            name: newProjectName,
-            description: newProjectDescription
-        });
+
+        if (isEditMode && editingProjectId) {
+            updateProjectMutation.mutate({
+                name: newProjectName,
+                description: newProjectDescription
+            });
+        } else {
+            createProjectMutation.mutate({
+                name: newProjectName,
+                description: newProjectDescription
+            });
+        }
     };
+
+    const openEditModal = (project: Project) => {
+        setIsEditMode(true);
+        setEditingProjectId(project.id);
+        setNewProjectName(project.name);
+        setNewProjectDescription(project.description || '');
+        setIsNewProjectModalOpen(true);
+    };
+
+    const handleDeleteProject = (projectId: string) => {
+        if (confirm('Are you sure you want to delete this project?')) {
+            deleteProjectMutation.mutate(projectId);
+        }
+    };
+
+    const { data: unreadCounts } = useQuery({
+        queryKey: ['unread-counts'],
+        queryFn: async () => talentXApi.entities.Message.getUnreadCount(),
+        refetchInterval: 10000
+    });
 
     const selectedProject = projects.find(p => p.id === selectedProjectId);
 
@@ -93,6 +173,14 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
 
                 <nav className="p-4 space-y-2 flex-1">
                     <button
+                        onClick={() => { setActiveView('overview'); setSelectedProjectId(null); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'overview' ? 'bg-[#204ecf]/10 text-[#204ecf]' : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                    >
+                        <BarChart className="w-5 h-5" />
+                        Dashboard
+                    </button>
+                    <button
                         onClick={() => { setActiveView('projects'); setSelectedProjectId(null); }}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'projects' ? 'bg-[#204ecf]/10 text-[#204ecf]' : 'text-gray-600 hover:bg-gray-50'
                             }`}
@@ -102,11 +190,18 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                     </button>
                     <button
                         onClick={() => setActiveView('messages')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'messages' ? 'bg-[#204ecf]/10 text-[#204ecf]' : 'text-gray-600 hover:bg-gray-50'
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'messages' ? 'bg-[#204ecf]/10 text-[#204ecf]' : 'text-gray-600 hover:bg-gray-50'
                             }`}
                     >
-                        <MessageSquare className="w-5 h-5" />
-                        Messages
+                        <div className="flex items-center gap-3">
+                            <MessageSquare className="w-5 h-5" />
+                            Messages
+                        </div>
+                        {(unreadCounts?.general || 0) + (unreadCounts?.support || 0) > 0 && (
+                            <span className="bg-[#204ecf] text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                                {(unreadCounts?.general || 0) + (unreadCounts?.support || 0)}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveView('hire')}
@@ -116,7 +211,11 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                         <Users className="w-5 h-5" />
                         Hire Talent
                     </button>
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                    <button
+                        onClick={() => setActiveView('settings')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'settings' ? 'bg-[#204ecf]/10 text-[#204ecf]' : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                    >
                         <Settings className="w-5 h-5" />
                         Settings
                     </button>
@@ -167,12 +266,14 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                                 className="pl-10 pr-4 py-2 rounded-full bg-gray-100 border-none text-sm focus:ring-2 focus:ring-[#204ecf] w-64"
                             />
                         </div>
-                        <Button variant="ghost" size="icon" className="relative">
-                            <Bell className="w-5 h-5 text-gray-500" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                        </Button>
+                        <NotificationCenter userId={user.id} />
                         <Button
-                            onClick={() => setIsNewProjectModalOpen(true)}
+                            onClick={() => {
+                                setIsEditMode(false);
+                                setNewProjectName('');
+                                setNewProjectDescription('');
+                                setIsNewProjectModalOpen(true);
+                            }}
                             className="bg-[#204ecf] hover:bg-[#1a3da8] text-white rounded-full px-6"
                         >
                             <Plus className="w-4 h-4 mr-2" /> New Project
@@ -181,9 +282,11 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                 </header>
 
                 <div className="p-4 sm:p-8 flex-1 overflow-y-auto">
+                    {activeView === 'overview' && <ClientOverview />}
                     {activeView === 'projects' && (
                         selectedProjectId && selectedProject ? (
                             <ProjectDetail
+                                user={user}
                                 project={selectedProject}
                                 onBack={() => setSelectedProjectId(null)}
                             />
@@ -191,11 +294,14 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                             <ProjectList
                                 projects={projects}
                                 onSelectProject={setSelectedProjectId}
+                                onEdit={openEditModal}
+                                onDelete={handleDeleteProject}
                             />
                         )
                     )}
 
-                    {activeView === 'messages' && <MessagesView />}
+                    {activeView === 'messages' && <MessagesView user={user} />}
+                    {activeView === 'settings' && <SettingsView />}
                     {activeView === 'hire' && (
                         <div>
                             <div className="mb-8">
@@ -213,12 +319,12 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-[#1a1a2e]">Create New Project</h3>
-                            <button onClick={() => setIsNewProjectModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                            <h3 className="text-xl font-bold text-[#1a1a2e]">{isEditMode ? 'Edit Project' : 'Create New Project'}</h3>
+                            <button onClick={() => { setIsNewProjectModalOpen(false); setIsEditMode(false); setNewProjectName(''); setNewProjectDescription(''); }} className="text-gray-400 hover:text-gray-600">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateProject} className="p-6 space-y-4">
+                        <form onSubmit={handleCreateOrUpdateProject} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
                                 <input
@@ -243,10 +349,13 @@ export default function ClientDashboard({ user, onLogout, activeView, setActiveV
                             <div className="pt-4">
                                 <Button
                                     type="submit"
-                                    disabled={createProjectMutation.isPending}
+                                    disabled={createProjectMutation.isPending || updateProjectMutation.isPending}
                                     className="w-full bg-[#204ecf] hover:bg-[#1a3da8] text-white py-6 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all"
                                 >
-                                    {createProjectMutation.isPending ? 'Creating...' : 'Create Project'}
+                                    {isEditMode
+                                        ? (updateProjectMutation.isPending ? 'Updating...' : 'Update Project')
+                                        : (createProjectMutation.isPending ? 'Creating...' : 'Create Project')
+                                    }
                                 </Button>
                             </div>
                         </form>

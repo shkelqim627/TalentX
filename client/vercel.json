@@ -1,0 +1,18 @@
+{
+    "github": {
+        "enabled": true,
+        "silent": true,
+        "autoJobCancelation": true
+    },
+    "git": {
+        "deploymentEnabled": {
+            "main": true,
+            "develop": false,
+            "staging": false,
+            "feature": false,
+            "hotfix": false,
+            "release": false,
+            "preview": false
+        }
+    }
+}

@@ -2,15 +2,23 @@ import React from 'react';
 import { Project, User } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, DollarSign, Users, ChevronRight, MoreVertical, Briefcase } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Calendar, DollarSign, Users, ChevronRight, MoreVertical, Briefcase, Edit, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface ProjectListProps {
     projects: Project[];
     onSelectProject: (projectId: string) => void;
+    onEdit?: (project: Project) => void;
+    onDelete?: (projectId: string) => void;
 }
 
-export default function ProjectList({ projects, onSelectProject }: ProjectListProps) {
+export default function ProjectList({ projects, onSelectProject, onEdit, onDelete }: ProjectListProps) {
     if (projects.length === 0) {
         return (
             <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
@@ -49,9 +57,21 @@ export default function ProjectList({ projects, onSelectProject }: ProjectListPr
                                     {project.name}
                                 </h3>
                             </div>
-                            <Button variant="ghost" size="icon" className="text-gray-400 hover:text-gray-600 -mr-2 -mt-2">
-                                <MoreVertical className="w-4 h-4" />
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-gray-400 hover:text-gray-600 -mr-2 -mt-2">
+                                        <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit?.(project); }}>
+                                        <Edit className="w-4 h-4 mr-2" /> Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); onDelete?.(project.id); }}>
+                                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </CardHeader>
                         <CardContent className="p-6 pt-0">
                             <p className="text-sm text-gray-500 mb-6 line-clamp-2 h-10">
@@ -94,28 +114,39 @@ export default function ProjectList({ projects, onSelectProject }: ProjectListPr
                                 </div>
                             </div>
                         </CardContent>
-                        <CardFooter className="p-6 pt-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/50">
-                            <div className="flex -space-x-2">
-                                {project.team_members?.slice(0, 3).map((member: User, i: number) => (
-                                    <img
-                                        key={i}
-                                        src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`}
-                                        alt={member.full_name}
-                                        className="w-8 h-8 rounded-full border-2 border-white"
-                                        title={member.full_name}
-                                    />
-                                ))}
-                                {(project.team_members?.length || 0) > 3 && (
-                                    <div className="w-8 h-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-600">
-                                        +{(project.team_members?.length || 0) - 3}
+                        <CardFooter className="p-6 pt-0 border-t border-gray-50 flex items-center justify-between mt-auto">
+                            {project.assigned_to ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="relative">
+                                        <img
+                                            src={project.assigned_to.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(project.assigned_to.name)}&background=random`}
+                                            alt={project.assigned_to.name}
+                                            className="w-8 h-8 rounded-full border border-gray-100 object-cover"
+                                        />
+                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${project.assigned_to.type === 'agency' ? 'bg-purple-500' :
+                                            project.assigned_to.type === 'team' ? 'bg-blue-500' :
+                                                'bg-[#00c853]'
+                                            }`} />
                                     </div>
-                                )}
-                                {(!project.team_members || project.team_members.length === 0) && (
-                                    <span className="text-xs text-gray-400 italic">No team yet</span>
-                                )}
-                            </div>
-                            <div className="flex items-center text-xs font-bold text-[#204ecf] group-hover:translate-x-1 transition-transform">
-                                View Details <ChevronRight className="w-3 h-3 ml-1" />
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight leading-none mb-0.5">
+                                            {project.assigned_to.type}
+                                        </span>
+                                        <span className="text-xs font-bold text-[#1a1a2e] limit-1-line">
+                                            {project.assigned_to.name}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 text-gray-400">
+                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-dashed border-gray-200">
+                                        <Users className="w-4 h-4 text-gray-300" />
+                                    </div>
+                                    <span className="text-xs font-medium italic">Unassigned</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-[#204ecf] font-bold text-xs group-hover:translate-x-1 transition-transform">
+                                View Details <ChevronRight className="w-4 h-4" />
                             </div>
                         </CardFooter>
                     </Card>

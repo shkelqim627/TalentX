@@ -9,8 +9,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createPageUrl } from '@/utils';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from "@/components/ui/card";
+import { X } from 'lucide-react';
 
 function TalentProfileContent() {
     const router = useRouter();
@@ -31,6 +32,28 @@ function TalentProfileContent() {
         enabled: !!talentId
     });
 
+    const [isHireModalOpen, setIsHireModalOpen] = useState(false);
+    const [hireData, setHireData] = useState({
+        rateType: 'hourly',
+        rateAmount: 0,
+        projectId: '',
+        projectName: '',
+    });
+
+    const { data: userProjects = [] } = useQuery({
+        queryKey: ['user-projects'],
+        queryFn: async () => {
+            const user = await talentXApi.auth.me();
+            return await talentXApi.entities.Project.filter({ client_email: user.email });
+        },
+    });
+
+    useEffect(() => {
+        if (talent) {
+            setHireData(prev => ({ ...prev, rateAmount: talent.hourly_rate || 0 }));
+        }
+    }, [talent]);
+
     const handleHire = async () => {
         if (!talent) return;
         setLoading(true);
@@ -49,20 +72,38 @@ function TalentProfileContent() {
                 return;
             }
 
-            // Create hire request
+            let finalProjectId = hireData.projectId;
+
+            if (!finalProjectId || finalProjectId === 'new') {
+                toast.error('Please select a project');
+                setLoading(false);
+                return;
+            }
+
+            // Create hire request with refined details
             await talentXApi.entities.HireRequest.create({
                 client_name: user.full_name,
                 client_email: user.email,
                 hire_type: 'talent',
                 category: talent.category,
                 matched_talent_id: talent.id,
-                status: 'pending'
+                status: 'pending',
+                // Add rate and project details to metadata if supported, 
+                // but better yet, we'll implement a proper membership creation in backend
+                data: JSON.stringify({
+                    projectId: finalProjectId,
+                    rateType: hireData.rateType,
+                    rateAmount: hireData.rateAmount
+                })
             });
 
             toast.success('Hire request submitted successfully!');
-            router.push(createPageUrl('BrowseTalent'));
-        } catch (error) {
-            toast.error('Please log in to hire');
+            setIsHireModalOpen(false);
+            router.push(createPageUrl('Dashboard'));
+        } catch (error: any) {
+            console.error('Hire request failed:', error);
+            const message = error.response?.data?.message || 'Failed to submit hire request';
+            toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -116,7 +157,7 @@ function TalentProfileContent() {
                                         <Button variant="outline" className="hidden sm:flex">
                                             Save Profile
                                         </Button>
-                                        <Button className="bg-primary hover:bg-primary-hover text-white shadow-lg shadow-primary/25" onClick={handleHire} disabled={loading}>
+                                        <Button className="bg-primary hover:bg-primary-hover text-white shadow-lg shadow-primary/25" onClick={() => setIsHireModalOpen(true)} disabled={loading}>
                                             Hire Now
                                         </Button>
                                     </div>
@@ -274,6 +315,82 @@ function TalentProfileContent() {
                     </div>
                 </div>
             </div>
+            {/* Hire Modal */}
+            <AnimatePresence>
+                {isHireModalOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-primary/5">
+                                <div>
+                                    <h3 className="text-xl font-bold text-[#1a1a2e]">Hire {talent.full_name}</h3>
+                                    <p className="text-sm text-gray-500">Configure your hiring terms</p>
+                                </div>
+                                <button onClick={() => setIsHireModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                {/* Rate Selection */}
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-bold text-gray-700">Hiring Rate</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => setHireData({ ...hireData, rateType: 'hourly', rateAmount: talent.hourly_rate || 0 })}
+                                            className={`py-3 px-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${hireData.rateType === 'hourly' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-gray-500 hover:border-gray-200'}`}
+                                        >
+                                            <span className="font-bold">Hourly</span>
+                                            <span className="text-xs">${talent.hourly_rate || 0}/hr</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setHireData({ ...hireData, rateType: 'monthly', rateAmount: (talent.hourly_rate || 0) * 160 })}
+                                            className={`py-3 px-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${hireData.rateType === 'monthly' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-gray-500 hover:border-gray-200'}`}
+                                        >
+                                            <span className="font-bold">Monthly</span>
+                                            <span className="text-xs">${(talent.hourly_rate || 0) * 160}/mo</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Project Selection */}
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-bold text-gray-700">Assign to Project</label>
+                                    <select
+                                        className="w-full text-black px-4 py-3 rounded-xl border-2 border-gray-100 focus:border-primary outline-none transition-all bg-white"
+                                        value={hireData.projectId}
+                                        onChange={(e) => setHireData({ ...hireData, projectId: e.target.value })}
+                                    >
+                                        <option value="">Select a Project</option>
+                                        {userProjects.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+
+                                    {/* Project creation removed as per user request */}
+                                </div>
+
+                                <div className="pt-4">
+                                    <Button
+                                        onClick={handleHire}
+                                        disabled={loading}
+                                        className="w-full bg-primary hover:bg-primary-hover text-white py-6 rounded-xl font-bold shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirm Hiring'}
+                                    </Button>
+                                    <p className="text-[10px] text-center text-gray-400 mt-4 px-6">
+                                        By clicking confirm, you agree to TalentX's Terms of Service and hiring policies.
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

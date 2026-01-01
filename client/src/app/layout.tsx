@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Montserrat } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 import Providers from "@/providers";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/toaster";
 
-const inter = Inter({ subsets: ["latin"] });
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: '--font-proxima', // Create a variable for use in Tailwind
+});
 
 export const metadata: Metadata = {
   title: {
@@ -57,7 +60,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${montserrat.variable} font-sans`}>
         <Providers>
           <ClientLayout>
             {children}

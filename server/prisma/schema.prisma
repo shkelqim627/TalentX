@@ -16,7 +16,9 @@ model User {
   password   String
   full_name  String
   role       String   // 'client' | 'talent' | 'agency' | 'admin'
+  status     String   @default("active") // 'active' | 'disabled'
   avatar_url String?
+  stripeCustomerId String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -48,9 +50,15 @@ model Talent {
   lng               Float?
   rating            Float?   @default(0)
   completed_projects Int?    @default(0)
+
+  // Application Details
+  resume_url        String?
+  applied_at        DateTime @default(now())
+  application_status String   @default("pending") // 'pending' | 'interview_invited' | 'rejected' | 'accepted'
   
   teams             TeamMember[]
   assignedProjects  Project[] @relation("AssignedTalent")
+  memberships       ProjectMembership[]
 }
 
 model Agency {
@@ -58,6 +66,8 @@ model Agency {
   userId            String   @unique
   user              User     @relation(fields: [userId], references: [id])
   agency_name       String
+  company_website   String?
+  linkedin_company_page String?
   description       String?
   services          String?  // JSON string
   industry_focus    String?  // JSON string
@@ -71,6 +81,11 @@ model Agency {
   completed_projects Int?    @default(0)
   rating            Float?   @default(0)
   image_url         String?
+
+  // Application Details
+  resume_url        String?
+  applied_at        DateTime @default(now())
+  application_status String   @default("pending") // 'pending' | 'interview_invited' | 'rejected' | 'accepted'
   
   assignedProjects  Project[] @relation("AssignedAgency")
 }
@@ -128,7 +143,7 @@ model Project {
   teamId       String?
   team         Team?    @relation("AssignedTeam", fields: [teamId], references: [id])
   agencyId     String?
-  agency       Agency?  @relation("AssignedAgency", fields: [agencyId], references: [id])
+  assignedAgency    Agency?  @relation("AssignedAgency", fields: [agencyId], references: [id])
 
   whiteboard_url String?
   srs_content  String?
@@ -136,12 +151,28 @@ model Project {
   design_diagram_url String?
 
   tasks        Task[]
+  memberships  ProjectMembership[]
+}
+
+model ProjectMembership {
+  id        String   @id @default(uuid())
+  projectId String
+  talentId  String
+  role      String?  // e.g., 'lead developer'
+  rateType  String   @default("hourly") // 'hourly' | 'monthly'
+  rateAmount Float
+  joinedAt  DateTime @default(now())
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  talent    Talent   @relation(fields: [talentId], references: [id])
+
+  @@unique([projectId, talentId])
 }
 
 model Task {
   id          String   @id @default(uuid())
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id])
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title       String
   description String?
   status      String   @default("todo") // 'todo' | 'in_progress' | 'review' | 'done'
@@ -177,5 +208,42 @@ model HireRequest {
   matched_talent_id   String?
   matched_team_id     String?
   matched_agency_id   String?
+  data                String?  // JSON field for extra hiring terms
   createdAt           DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // 'application_received' | 'application_status_update' | 'other'
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String?  // Optional for backward compatibility, but should be populated
+  data      String?  // JSON string for additional data
+}
+
+model Application {
+  id                String   @id @default(uuid())
+  full_name         String
+  email             String
+  role              String   // 'talent' | 'agency'
+  
+  // Talent Fields
+  title             String?
+  category          String?
+  experience_years  Int?
+  linkedin          String?
+  portfolio         String?
+  skills            String?  // JSON
+  
+  // Agency Fields
+  agency_name       String?
+  team_size         Int?
+  company_website   String?
+  linkedin_company_page String?
+  founded_year      Int?
+  
+  resume_url        String?
+  status            String   @default("pending") // 'pending' | 'reviewing' | 'accepted' | 'rejected'
+  applied_at        DateTime @default(now())
 }

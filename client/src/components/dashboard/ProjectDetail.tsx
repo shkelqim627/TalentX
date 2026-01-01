@@ -1,22 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { Project, Task, User } from '@/types';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Circle, Plus, FileText, MessageSquare, MoreHorizontal, Upload, Image as ImageIcon, Monitor, Save } from 'lucide-react';
+import { ArrowLeft, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Circle, Plus, FileText, MessageSquare, MoreHorizontal, Upload, Image as ImageIcon, Monitor, Save, LayoutGrid, List, Users, Star, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { talentXApi } from '@/api/talentXApi';
 import { toast } from 'sonner';
+import TaskModal from './TaskModal';
+import TaskListView from './TaskListView';
 
 interface ProjectDetailProps {
+    user: User;
     project: Project;
     onBack: () => void;
 }
 
-export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
+export default function ProjectDetail({ user, project, onBack }: ProjectDetailProps) {
     const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'team' | 'files' | 'srs' | 'design' | 'whiteboard'>('overview');
     const [srsContent, setSrsContent] = useState(project.srs_content || '');
     const [whiteboardUrl, setWhiteboardUrl] = useState(project.whiteboard_url || '');
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+    const [taskViewMode, setTaskViewMode] = useState<'board' | 'list'>('board');
     const queryClient = useQueryClient();
+
+    const isClientOrAdmin = user.role === 'client' || user.role === 'admin';
+    const canManageTasks = user.role === 'client' || user.role === 'admin' || user.role === 'agency';
+
+    // Combine team members with the assigned entity if applicable for task assignment
+    const assignableMembers = [
+        ...(project.team_members || []),
+        ...(project.assigned_to ? [{
+            id: project.assigned_to.userId || project.assigned_to.id,
+            full_name: project.assigned_to.name,
+            role: project.assigned_to.type,
+            avatar_url: project.assigned_to.image_url
+        }] : [])
+    ].filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i); // specific deduplication
 
     useEffect(() => {
         setSrsContent(project.srs_content || '');
@@ -29,14 +49,38 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
         queryFn: async () => talentXApi.entities.Task.filter({ project_id: project.id })
     });
 
-    // Update Task Mutation
-    const updateTaskMutation = useMutation({
+    // Update Task (Status only - for Kanban drag/drop or quick actions)
+    const updateTaskStatusMutation = useMutation({
         mutationFn: async ({ id, status }: { id: string; status: Task['status'] }) => {
             return await talentXApi.entities.Task.update(id, { status });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tasks', project.id] });
             toast.success('Task updated');
+        }
+    });
+
+    // Detailed Update Task Mutation
+    const updateTaskMutation = useMutation({
+        mutationFn: async (updatedTask: any) => {
+            const { id, ...data } = updatedTask;
+            const payload = {
+                title: data.title,
+                description: data.description,
+                priority: data.priority,
+                due_date: data.due_date,
+                assignee_id: data.assigneeId || null,
+            };
+            return await talentXApi.entities.Task.update(id, payload);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks', project.id] });
+            setIsTaskModalOpen(false);
+            setSelectedTask(null);
+            toast.success('Task updated successfully');
+        },
+        onError: () => {
+            toast.error('Failed to update task');
         }
     });
 
@@ -54,6 +98,44 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
         }
     });
 
+    // Create Task Mutation
+    const createTaskMutation = useMutation({
+        mutationFn: async (newTask: any) => {
+            return await talentXApi.entities.Task.create({
+                title: newTask.title,
+                description: newTask.description,
+                priority: newTask.priority,
+                due_date: newTask.due_date,
+                assignee_id: newTask.assigneeId || null,
+                project_id: project.id
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks', project.id] });
+            setIsTaskModalOpen(false);
+            toast.success('Task created successfully');
+        },
+        onError: () => {
+            toast.error('Failed to create task');
+        }
+    });
+
+    // Delete Task Mutation
+    const deleteTaskMutation = useMutation({
+        mutationFn: async (id: string) => {
+            return await talentXApi.entities.Task.delete(id);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks', project.id] });
+            setIsTaskModalOpen(false);
+            setSelectedTask(null);
+            toast.success('Task deleted successfully');
+        },
+        onError: () => {
+            toast.error('Failed to delete task');
+        }
+    });
+
     const handleSaveSrs = () => {
         updateProjectMutation.mutate({ srs_content: srsContent });
     };
@@ -61,6 +143,16 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
     const handleSaveWhiteboard = () => {
         updateProjectMutation.mutate({ whiteboard_url: whiteboardUrl });
     };
+
+    const handleTaskSave = (data: any) => {
+        if (selectedTask) {
+            updateTaskMutation.mutate({ ...data, id: selectedTask.id });
+        } else {
+            createTaskMutation.mutate(data as any);
+        }
+    };
+
+
 
     const KanbanBoard = () => {
         const columns = [
@@ -82,7 +174,7 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                     {tasks?.filter(t => t.status === col.id).length || 0}
                                 </span>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setSelectedTask(null); setIsTaskModalOpen(true); }}>
                                 <Plus className="w-4 h-4 text-gray-400" />
                             </Button>
                         </div>
@@ -92,6 +184,7 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                 <motion.div
                                     key={task.id}
                                     layoutId={task.id}
+                                    onClick={() => { setSelectedTask(task); setIsTaskModalOpen(true); }}
                                     className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer group"
                                 >
                                     <div className="flex justify-between items-start mb-2">
@@ -108,9 +201,9 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                     <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                         <div className="flex -space-x-2">
                                             <img
-                                                src={`https://ui-avatars.com/api/?name=${task.assignee || 'Unassigned'}&background=random`}
+                                                src={task.assignee?.avatar_url || `https://ui-avatars.com/api/?name=${task.assignee?.full_name || 'Unassigned'}&background=random`}
                                                 className="w-6 h-6 rounded-full border-2 border-white"
-                                                alt="Assignee"
+                                                alt={task.assignee?.full_name || 'Unassigned'}
                                             />
                                         </div>
                                         <div className="text-xs text-gray-400 font-medium">
@@ -125,7 +218,10 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                                 size="sm"
                                                 variant="outline"
                                                 className="h-6 text-[10px] px-2"
-                                                onClick={() => updateTaskMutation.mutate({ id: task.id, status: columns[columns.findIndex(c => c.id === col.id) - 1].id as any })}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateTaskStatusMutation.mutate({ id: task.id, status: columns[columns.findIndex(c => c.id === col.id) - 1].id as any });
+                                                }}
                                             >
                                                 Prev
                                             </Button>
@@ -135,7 +231,10 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                                 size="sm"
                                                 variant="outline"
                                                 className="h-6 text-[10px] px-2 ml-auto"
-                                                onClick={() => updateTaskMutation.mutate({ id: task.id, status: columns[columns.findIndex(c => c.id === col.id) + 1].id as any })}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateTaskStatusMutation.mutate({ id: task.id, status: columns[columns.findIndex(c => c.id === col.id) + 1].id as any });
+                                                }}
                                             >
                                                 Next
                                             </Button>
@@ -170,35 +269,68 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                            <DollarSign className="w-5 h-5 text-blue-600" />
+                {isClientOrAdmin && (
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                                <DollarSign className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-500">Budget Usage</span>
                         </div>
-                        <span className="text-sm font-medium text-gray-500">Budget Usage</span>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-bold text-[#1a1a2e]">${project.budget_spent?.toLocaleString() || 0}</span>
+                            <span className="text-sm text-gray-400">of ${project.total_budget?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${((project.budget_spent || 0) / (project.total_budget || 1)) * 100}%` }} />
+                        </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-[#1a1a2e]">${project.budget_spent?.toLocaleString() || 0}</span>
-                        <span className="text-sm text-gray-400">of ${project.total_budget?.toLocaleString() || 0}</span>
-                    </div>
-                    <div className="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${((project.budget_spent || 0) / (project.total_budget || 1)) * 100}%` }} />
-                    </div>
-                </div>
+                )}
 
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                            <Clock className="w-5 h-5 text-purple-600" />
+                            <Users className="w-5 h-5 text-purple-600" />
                         </div>
-                        <span className="text-sm font-medium text-gray-500">Next Milestone</span>
+                        <span className="text-sm font-medium text-gray-500">Assigned To</span>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-xl font-bold text-[#1a1a2e] truncate">{project.next_milestone ? 'Beta Release' : 'None'}</span>
-                        <span className="text-sm text-gray-400">
-                            {project.next_milestone ? new Date(project.next_milestone).toLocaleDateString() : 'No upcoming milestones'}
-                        </span>
-                    </div>
+                    {project.assigned_to ? (
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-3">
+                                <img
+                                    src={project.assigned_to.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(project.assigned_to.name)}&background=random`}
+                                    alt={project.assigned_to.name}
+                                    className="w-10 h-10 rounded-xl border border-gray-100 object-cover"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-bold text-[#1a1a2e]">{project.assigned_to.name}</span>
+                                    <span className="text-xs text-[#204ecf] font-bold uppercase">{project.assigned_to.type}</span>
+                                </div>
+                            </div>
+
+                            {/* Team Members Avatars */}
+                            {project.team_members && project.team_members.length > 0 && (
+                                <div className="flex -space-x-2 pl-2">
+                                    {project.team_members.slice(0, 5).map((member) => (
+                                        <img
+                                            key={member.id}
+                                            src={member.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.full_name)}&background=random`}
+                                            alt={member.full_name}
+                                            title={member.full_name}
+                                            className="w-8 h-8 rounded-full border-2 border-white ring-1 ring-gray-100"
+                                        />
+                                    ))}
+                                    {project.team_members.length > 5 && (
+                                        <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-xs font-bold text-gray-500">
+                                            +{project.team_members.length - 5}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-sm font-medium text-gray-400 italic">No assigned entity</div>
+                    )}
                 </div>
             </div>
 
@@ -225,28 +357,92 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
     );
 
     const TeamTab = () => (
-        <div className="grid md:grid-cols-2 gap-6">
-            {project.team_members?.map((member) => (
-                <div key={member.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4">
-                    <img
-                        src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`}
-                        alt={member.full_name}
-                        className="w-16 h-16 rounded-full"
-                    />
-                    <div className="flex-1">
-                        <h3 className="font-bold text-[#1a1a2e]">{member.full_name}</h3>
-                        <p className="text-sm text-gray-500 capitalize">{member.role}</p>
+        <div className="space-y-8">
+            {/* Primary Assignee */}
+            {project.assigned_to && (
+                <div className="bg-gradient-to-r from-gray-50 to-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-bold text-lg text-[#1a1a2e] flex items-center gap-2">
+                            Primary Engagement: <span className="text-[#204ecf] capitalize">{project.assigned_to.type}</span>
+                        </h3>
+                        <Button variant="outline" size="sm" onClick={() => setActiveTab('overview')}>
+                            Engagement Terms
+                        </Button>
                     </div>
-                    <Button variant="outline" size="icon">
-                        <MessageSquare className="w-4 h-4" />
-                    </Button>
-                </div>
-            ))}
-            {(!project.team_members || project.team_members.length === 0) && (
-                <div className="col-span-2 text-center py-12 text-gray-500">
-                    No team members assigned yet.
+                    <div className="flex items-center gap-6">
+                        <img
+                            src={project.assigned_to.image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(project.assigned_to.name)}&background=random`}
+                            alt={project.assigned_to.name}
+                            className="w-20 h-20 rounded-2xl shadow-md border-4 border-white object-cover"
+                        />
+                        <div className="flex-1">
+                            <h4 className="text-xl font-bold text-[#1a1a2e]">{project.assigned_to.name}</h4>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                                <span className="flex items-center gap-1">
+                                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" /> 5.0 Rating
+                                </span>
+                                <span className="flex items-center gap-1 capitalize">
+                                    <Briefcase className="w-4 h-4 text-gray-400" /> {project.assigned_to.type} Partner
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button className="bg-[#204ecf] hover:bg-[#1a3da8] text-white rounded-xl">
+                                <MessageSquare className="w-4 h-4 mr-2" /> Message
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
+
+            <div className="grid md:grid-cols-2 gap-6">
+                {project.team_members?.map((member) => (
+                    <div key={member.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4">
+                        <img
+                            src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`}
+                            alt={member.full_name}
+                            className="w-16 h-16 rounded-full"
+                        />
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-[#1a1a2e]">{member.full_name}</h3>
+                                {member.rateAmount && (
+                                    <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-bold">
+                                        ${member.rateAmount}/{member.rateType === 'hourly' ? 'hr' : 'mo'}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-500 capitalize">{member.role}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {isClientOrAdmin && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="hidden sm:flex gap-1 items-center hover:bg-green-50 hover:text-green-700 hover:border-green-200 transition-colors"
+                                    onClick={async () => {
+                                        try {
+                                            await talentXApi.entities.Project.recordPayment({
+                                                projectId: project.id,
+                                                talentId: member.id,
+                                                amount: member.rateType === 'monthly' ? (member.rateAmount || 0) : (member.rateAmount || 0) * 160
+                                            });
+                                            toast.success(`Payment notification sent for ${member.full_name}`);
+                                        } catch (error) {
+                                            toast.error('Failed to send payment notification');
+                                        }
+                                    }}
+                                >
+                                    <DollarSign className="w-3 h-3" /> Pay
+                                </Button>
+                            )}
+                            <Button variant="outline" size="icon">
+                                <MessageSquare className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
@@ -289,28 +485,37 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-lg text-[#1a1a2e]">Software Requirements Specification (SRS)</h3>
-                    <Button
-                        onClick={handleSaveSrs}
-                        disabled={updateProjectMutation.isPending}
-                        className="bg-[#204ecf] hover:bg-[#1a3da8] text-white"
-                    >
-                        <Save className="w-4 h-4 mr-2" /> Save SRS
-                    </Button>
+                    {isClientOrAdmin && (
+                        <Button
+                            onClick={handleSaveSrs}
+                            disabled={updateProjectMutation.isPending}
+                            className="bg-[#204ecf] hover:bg-[#1a3da8] text-white"
+                        >
+                            <Save className="w-4 h-4 mr-2" /> Save SRS
+                        </Button>
+                    )}
                 </div>
                 <textarea
                     rows={15}
                     value={srsContent}
                     onChange={(e) => setSrsContent(e.target.value)}
-                    className="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#204ecf] focus:border-transparent outline-none transition-all resize-none font-mono text-sm"
+                    disabled={!isClientOrAdmin}
+                    className="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#204ecf] focus:border-transparent outline-none transition-all resize-none font-mono text-sm disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="Write your project requirements here..."
                 />
             </div>
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                 <h3 className="font-bold text-lg text-[#1a1a2e] mb-4">Upload SRS File</h3>
-                <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-[#204ecf] transition-colors cursor-pointer">
-                    <Upload className="w-10 h-10 text-gray-400 mx-auto mb-4" />
-                    <p className="text-sm text-gray-500">Click to upload or drag and drop SRS document (PDF, DOCX)</p>
-                </div>
+                {isClientOrAdmin ? (
+                    <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-[#204ecf] transition-colors cursor-pointer">
+                        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-4" />
+                        <p className="text-sm text-gray-500">Click to upload or drag and drop SRS document (PDF, DOCX)</p>
+                    </div>
+                ) : (
+                    <div className="p-8 text-center text-gray-400 italic bg-gray-50 rounded-2xl border border-gray-100">
+                        Read-only access to SRS
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -327,11 +532,17 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                         </div>
                     </div>
                 ) : (
-                    <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center hover:border-[#204ecf] transition-colors cursor-pointer">
-                        <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-sm text-gray-500 font-medium">Upload System Design Diagram</p>
-                        <p className="text-xs text-gray-400 mt-1">Supports PNG, JPG, SVG</p>
-                    </div>
+                    isClientOrAdmin ? (
+                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center hover:border-[#204ecf] transition-colors cursor-pointer">
+                            <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                            <p className="text-sm text-gray-500 font-medium">Upload System Design Diagram</p>
+                            <p className="text-xs text-gray-400 mt-1">Supports PNG, JPG, SVG</p>
+                        </div>
+                    ) : (
+                        <div className="p-12 text-center text-gray-400 italic bg-gray-50 rounded-2xl border border-gray-100">
+                            No diagram uploaded
+                        </div>
+                    )
                 )}
             </div>
         </div>
@@ -342,13 +553,15 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-lg text-[#1a1a2e]">Interactive Whiteboard</h3>
-                    <Button
-                        onClick={handleSaveWhiteboard}
-                        disabled={updateProjectMutation.isPending}
-                        className="bg-[#204ecf] hover:bg-[#1a3da8] text-white"
-                    >
-                        <Save className="w-4 h-4 mr-2" /> Save Link
-                    </Button>
+                    {isClientOrAdmin && (
+                        <Button
+                            onClick={handleSaveWhiteboard}
+                            disabled={updateProjectMutation.isPending}
+                            className="bg-[#204ecf] hover:bg-[#1a3da8] text-white"
+                        >
+                            <Save className="w-4 h-4 mr-2" /> Save Link
+                        </Button>
+                    )}
                 </div>
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Whiteboard URL (e.g. Miro, Excalidraw)</label>
@@ -356,7 +569,8 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                         type="url"
                         value={whiteboardUrl}
                         onChange={(e) => setWhiteboardUrl(e.target.value)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#204ecf] focus:border-transparent outline-none transition-all"
+                        disabled={!isClientOrAdmin}
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#204ecf] focus:border-transparent outline-none transition-all disabled:bg-gray-50 disabled:text-gray-500"
                         placeholder="https://miro.com/app/board/..."
                     />
                 </div>
@@ -395,16 +609,12 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline">Share</Button>
-                    <Button className="bg-[#204ecf] hover:bg-[#1a3da8] text-white">
-                        <Plus className="w-4 h-4 mr-2" /> Add Task
-                    </Button>
-                </div>
             </div>
 
+
+
             {/* Tabs */}
-            <div className="border-b border-gray-200">
+            <div className="border-b border-gray-200 flex justify-between items-end">
                 <nav className="flex gap-8 overflow-x-auto no-scrollbar">
                     {['overview', 'tasks', 'team', 'files', 'srs', 'design', 'whiteboard'].map((tab) => (
                         <button
@@ -423,6 +633,40 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                         </button>
                     ))}
                 </nav>
+                {activeTab === 'tasks' && (
+                    <div className="mb-2 flex items-center gap-3">
+                        <div className="bg-gray-100 p-1 rounded-xl flex items-center gap-1">
+                            <button
+                                onClick={() => setTaskViewMode('board')}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${taskViewMode === 'board'
+                                    ? 'bg-white text-[#204ecf] shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                <LayoutGrid className="w-3.5 h-3.5" />
+                                Board
+                            </button>
+                            <button
+                                onClick={() => setTaskViewMode('list')}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${taskViewMode === 'list'
+                                    ? 'bg-white text-[#204ecf] shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                <List className="w-3.5 h-3.5" />
+                                List
+                            </button>
+                        </div>
+                        {canManageTasks && (
+                            <Button
+                                onClick={() => setIsTaskModalOpen(true)}
+                                className="bg-[#204ecf] hover:bg-[#1a3da8] text-white size-sm h-8 text-xs"
+                            >
+                                <Plus className="w-3 h-3 mr-1.5" /> Add Task
+                            </Button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Content */}
@@ -433,13 +677,33 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                 transition={{ duration: 0.2 }}
             >
                 {activeTab === 'overview' && <OverviewTab />}
-                {activeTab === 'tasks' && <KanbanBoard />}
+                {activeTab === 'tasks' && (
+                    <div className="space-y-6">
+                        {taskViewMode === 'board' ? <KanbanBoard /> : <TaskListView tasks={tasks || []} onTaskClick={(task) => { setSelectedTask(task); setIsTaskModalOpen(true); }} />}
+                    </div>
+                )}
                 {activeTab === 'team' && <TeamTab />}
                 {activeTab === 'files' && <FilesTab />}
                 {activeTab === 'srs' && <SRSTab />}
                 {activeTab === 'design' && <DesignTab />}
                 {activeTab === 'whiteboard' && <WhiteboardTab />}
             </motion.div>
-        </div>
+
+            {/* Task Modal */}
+            {
+                isTaskModalOpen && (
+                    <TaskModal
+                        task={selectedTask}
+                        user={user}
+                        teamMembers={assignableMembers}
+                        onClose={() => { setIsTaskModalOpen(false); setSelectedTask(null); }}
+                        onSave={handleTaskSave}
+                        onDelete={(id) => deleteTaskMutation.mutate(id)}
+                        isSaving={createTaskMutation.isPending || updateTaskMutation.isPending || deleteTaskMutation.isPending}
+                        readOnly={!!selectedTask && !isClientOrAdmin}
+                    />
+                )
+            }
+        </div >
     );
 }

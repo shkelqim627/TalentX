@@ -9,7 +9,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createPageUrl } from '@/utils';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
 
 function AgencyProfileContent() {
     const router = useRouter();
@@ -30,6 +31,21 @@ function AgencyProfileContent() {
         enabled: !!agencyId
     });
 
+    const [isHireModalOpen, setIsHireModalOpen] = useState(false);
+    const [selectedProjectId, setSelectedProjectId] = useState('');
+
+    const { data: userProjects = [] } = useQuery({
+        queryKey: ['user-projects'],
+        queryFn: async () => {
+            try {
+                const user = await talentXApi.auth.me();
+                return await talentXApi.entities.Project.filter({ client_email: user.email });
+            } catch (error) {
+                return [];
+            }
+        },
+    });
+
     const handleHire = async () => {
         if (!agency) return;
         setLoading(true);
@@ -47,16 +63,26 @@ function AgencyProfileContent() {
                 return;
             }
 
+            if (!selectedProjectId) {
+                toast.error('Please select a project');
+                setLoading(false);
+                return;
+            }
+
             await talentXApi.entities.HireRequest.create({
                 client_name: user.full_name,
                 client_email: user.email,
                 hire_type: 'agency',
                 matched_agency_id: agency.id,
-                status: 'pending'
+                status: 'pending',
+                data: JSON.stringify({
+                    projectId: selectedProjectId
+                })
             });
 
             toast.success('Agency hire request submitted!');
-            router.push(createPageUrl('BrowseAgencies'));
+            setIsHireModalOpen(false);
+            router.push(createPageUrl('Dashboard'));
         } catch (error) {
             toast.error('Please log in to hire');
         } finally {
@@ -122,11 +148,11 @@ function AgencyProfileContent() {
                                     </div>
                                 </div>
                                 <Button
-                                    onClick={handleHire}
+                                    onClick={() => setIsHireModalOpen(true)}
                                     disabled={loading}
                                     className="bg-primary hover:bg-primary-hover text-white font-bold px-8 py-6 rounded-xl shadow-lg shadow-primary/25"
                                 >
-                                    Contact Agency
+                                    Hire Now
                                 </Button>
                             </div>
 
@@ -254,6 +280,90 @@ function AgencyProfileContent() {
                     </div>
                 </div>
             </div>
+
+            {/* Hire Modal */}
+            {isHireModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                    >
+                        <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white">
+                            <div>
+                                <h3 className="text-2xl font-bold text-[#1a1a2e]">Hire {agency.agency_name}</h3>
+                                <p className="text-gray-500 text-sm mt-1">Select a project to assign this agency</p>
+                            </div>
+                            <button onClick={() => setIsHireModalOpen(false)} className="bg-gray-100 p-2 rounded-xl text-gray-400 hover:text-gray-600 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-6">
+                            <div className="space-y-3">
+                                <label className="block text-sm font-bold text-gray-700">Choose Project</label>
+                                {userProjects.length > 0 ? (
+                                    <div className="grid gap-3">
+                                        {userProjects.map((project: any) => (
+                                            <button
+                                                key={project.id}
+                                                onClick={() => setSelectedProjectId(project.id)}
+                                                className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${selectedProjectId === project.id
+                                                    ? 'border-primary bg-primary/5 ring-4 ring-primary/10'
+                                                    : 'border-gray-100 hover:border-gray-200 bg-white'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${selectedProjectId === project.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                                        {project.name.charAt(0)}
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <div className="font-bold text-[#1a1a2e]">{project.name}</div>
+                                                        <div className="text-xs text-gray-500 truncate max-w-[200px]">{project.description || 'No description'}</div>
+                                                    </div>
+                                                </div>
+                                                {selectedProjectId === project.id && (
+                                                    <CheckCircle className="w-6 h-6 text-primary" />
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                                        <p className="text-gray-500 mb-4">No active projects found</p>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => router.push(createPageUrl('Dashboard'))}
+                                            className="rounded-xl"
+                                        >
+                                            Create Project First
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <Button
+                                onClick={handleHire}
+                                disabled={loading || !selectedProjectId}
+                                className="w-full bg-primary hover:bg-primary-hover text-white py-8 rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2 group"
+                            >
+                                {loading ? (
+                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                ) : (
+                                    <>
+                                        Confirm Hire Request
+                                        <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                                    </>
+                                )}
+                            </Button>
+
+                            <p className="text-center text-xs text-gray-400">
+                                By clicking confirm, you agree to our terms of service regarding agency engagements.
+                            </p>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }

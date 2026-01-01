@@ -11,48 +11,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 export default function Pricing() {
-    const [loading, setLoading] = useState(false);
     const router = useRouter();
-
-    const handleSubscribe = async () => {
-        setLoading(true);
-        try {
-            const user = await talentXApi.auth.me();
-
-            // Check if already subscribed
-            const existing = await talentXApi.entities.Subscription.filter({
-                user_email: user.email,
-                status: 'active'
-            });
-
-            if (existing.length > 0) {
-                toast.error('You already have an active subscription');
-                setLoading(false);
-                return;
-            }
-
-            // Create subscription
-            const today = new Date();
-            const nextMonth = new Date(today);
-            nextMonth.setMonth(nextMonth.getMonth() + 1);
-
-            await talentXApi.entities.Subscription.create({
-                user_email: user.email,
-                plan_name: 'Professional',
-                price: 59.99,
-                status: 'active',
-                start_date: today.toISOString().split('T')[0],
-                next_billing_date: nextMonth.toISOString().split('T')[0],
-                hires_count: 0
-            });
-
-            toast.success('Subscription activated successfully!');
-            router.push(createPageUrl('BrowseTalent'));
-        } catch (error) {
-            toast.error('Please log in to subscribe');
-            setLoading(false);
-        }
-    };
 
     return (
         <div className="min-h-screen bg-white">
@@ -116,13 +75,13 @@ export default function Pricing() {
                             ))}
                         </div>
 
-                        <Button
-                            onClick={handleSubscribe}
-                            disabled={loading}
-                            className="w-full bg-[#204ecf] hover:bg-[#1a3da8] text-white font-bold py-6 text-lg rounded-xl shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02]"
-                        >
-                            {loading ? 'Processing...' : 'Start Hiring Now'}
-                        </Button>
+                        <Link href="/hire?plan=professional" className="block w-full">
+                            <Button
+                                className="w-full bg-[#204ecf] hover:bg-[#1a3da8] text-white font-bold py-6 text-lg rounded-xl shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02]"
+                            >
+                                Start Hiring Now
+                            </Button>
+                        </Link>
                         <p className="text-xs text-center text-gray-400 mt-4">
                             No long-term contracts. Cancel anytime.
                         </p>

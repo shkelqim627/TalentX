@@ -2,10 +2,16 @@
 
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Menu, X, Code, Palette, TrendingUp, BarChart3, Briefcase, Users as UsersIcon, Zap, Shield, Globe, Rocket, Target, Heart } from 'lucide-react';
+import { ChevronDown, Menu, X, Code, Palette, TrendingUp, BarChart3, Briefcase, Users as UsersIcon, Zap, Shield, Globe, Rocket, Target, Heart, LogOut, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { createPageUrl } from '@/utils';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '@/store';
+import { logout } from '@/store/slices/authSlice';
+import { talentXApi } from '@/api/talentXApi';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 const megaMenuData = {
     talent: {
@@ -105,30 +111,38 @@ export default function Navbar() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
     const [hoveredTab, setHoveredTab] = useState<string | null>(null);
+    const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+    const dispatch = useDispatch();
+    const router = useRouter();
+
+    const handleLogout = async () => {
+        await talentXApi.auth.logout();
+        dispatch(logout());
+        toast.success('Logged out successfully');
+        router.push(createPageUrl('Home'));
+    };
 
     return (
-        <nav className="glass-nav sticky top-0 z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <nav className="glass-nav sticky top-0 z-50 transition-all duration-300 bg-white/80 border-b border-gray-100">
             {/* Announcement Bar */}
-            <div className="bg-[#1a1a2e] text-white text-center py-2.5 px-4 text-sm">
+            {/* <div className="bg-[#edf1fd] text-black text-center py-2.5 px-4 text-sm">
                 <span>TalentX launches </span>
                 <a href="#" className="text-[#00c853] hover:underline font-medium">GlobalHire</a>
                 <span> 🚀 The most competitively priced global workforce payroll platform.</span>
-            </div>
+            </div> */}
+
 
             {/* Main Navigation */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-20">
+                <div className="flex items-center justify-between h-16">
                     {/* Logo */}
                     <div className="flex items-center gap-10">
                         <Link href={createPageUrl('Home')} className="flex items-center gap-2">
-                            <div className="w-9 h-9 bg-[#00c853] rounded-xl flex items-center justify-center shadow-lg shadow-[#00c853]/20">
-                                <span className="text-white font-bold text-base">TX</span>
-                            </div>
                             <span className="text-2xl font-bold text-[#1a1a2e] tracking-tight">TalentX</span>
                         </Link>
 
                         {/* Desktop Navigation */}
-                        <div className="hidden lg:flex items-center gap-2" onMouseLeave={() => setHoveredTab(null)}>
+                        <div className="hidden lg:flex items-center gap-0" onMouseLeave={() => setHoveredTab(null)}>
                             {Object.entries(megaMenuData).map(([key, menu]) => (
                                 <div
                                     key={key}
@@ -254,17 +268,43 @@ export default function Navbar() {
 
                     {/* Right Side Actions */}
                     <div className="hidden lg:flex items-center gap-6">
-                        <Link href={createPageUrl('ApplyTalent')} className="text-sm font-semibold text-[#1a1a2e] hover:text-[#204ecf] transition-colors">
-                            Apply as a Talent
-                        </Link>
-                        <Link href={createPageUrl('Pricing')}>
-                            <Button className="bg-[#204ecf] hover:bg-[#1a3da8] text-white font-bold px-8 py-6 rounded-xl shadow-lg shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0">
-                                Hire Top Talent
-                            </Button>
-                        </Link>
-                        <Link href={createPageUrl('Login')} className="text-sm font-semibold text-[#1a1a2e] hover:text-[#204ecf] transition-colors">
-                            Log In
-                        </Link>
+                        {!isAuthenticated ? (
+                            <>
+                                <Link href={createPageUrl('ApplyTalent')} className="text-sm font-semibold text-[#1a1a2e] hover:text-[#204ecf] transition-colors">
+                                    Apply as a Talent
+                                </Link>
+                                <Link href={createPageUrl('Pricing')}>
+                                    <Button className="bg-[#00cc83] hover:bg-[#03b080] text-white font-bold px-6 py-4 rounded-[4px]">
+                                        Hire Top Talent
+                                    </Button>
+                                </Link>
+                                <Link href={createPageUrl('Login')} className="text-sm font-semibold text-[#1a1a2e] hover:text-[#204ecf] transition-colors">
+                                    Log In
+                                </Link>
+                            </>
+                        ) : (
+                            <>
+                                <Link href={createPageUrl('Dashboard')}>
+                                    <Button variant="ghost" className="text-sm font-semibold text-[#1a1a2e] hover:text-[#204ecf] transition-colors gap-2">
+                                        <LayoutDashboard className="w-4 h-4" />
+                                        Dashboard
+                                    </Button>
+                                </Link>
+                                <div className="flex items-center gap-4">
+                                    <div className="text-sm font-medium text-gray-600 hidden xl:block">
+                                        Hi, {user?.full_name?.split(' ')[0]}
+                                    </div>
+                                    <Button
+                                        onClick={handleLogout}
+                                        variant="outline"
+                                        className="border-gray-200 hover:bg-gray-50 text-gray-700 gap-2"
+                                    >
+                                        <LogOut className="w-4 h-4" />
+                                        Logout
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {/* Mobile Menu Button */}
@@ -312,13 +352,31 @@ export default function Navbar() {
                                 </div>
                             ))}
                             <div className="pt-6 border-t border-gray-100 space-y-4">
-                                <Link href={createPageUrl('ApplyTalent')} className="block px-4 py-2 text-sm font-semibold text-[#1a1a2e]">Apply as a Talent</Link>
-                                <Link href={createPageUrl('Pricing')}>
-                                    <Button className="w-full bg-[#204ecf] hover:bg-[#1a3da8] text-white font-bold py-6 rounded-xl">
-                                        Hire Top Talent
-                                    </Button>
-                                </Link>
-                                <Link href={createPageUrl('Login')} className="block px-4 py-2 text-sm font-semibold text-[#1a1a2e]">Log In</Link>
+                                {!isAuthenticated ? (
+                                    <>
+                                        <Link href={createPageUrl('ApplyTalent')} className="block px-4 py-2 text-sm font-semibold text-[#1a1a2e]">Apply as a Talent</Link>
+                                        <Link href={createPageUrl('Pricing')}>
+                                            <Button className="w-full bg-[#204ecf] hover:bg-[#1a3da8] text-white font-bold py-6 rounded-xl">
+                                                Hire Top Talent
+                                            </Button>
+                                        </Link>
+                                        <Link href={createPageUrl('Login')} className="block px-4 py-2 text-sm font-semibold text-[#1a1a2e]">Log In</Link>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Link href={createPageUrl('Dashboard')} className="block px-4 py-2 text-sm font-semibold text-[#1a1a2e] flex items-center gap-2">
+                                            <LayoutDashboard className="w-4 h-4" />
+                                            Dashboard
+                                        </Link>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="w-full text-left px-4 py-2 text-sm font-semibold text-red-600 flex items-center gap-2"
+                                        >
+                                            <LogOut className="w-4 h-4" />
+                                            Logout
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </motion.div>

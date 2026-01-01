@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Talent, Agency, Team, Subscription, HireRequest, Project, Task, User, Message, UserRole } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = 'http://localhost:5000/api';
 
 const apiClient = axios.create({
     baseURL: API_URL,
@@ -22,6 +22,7 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
+        console.log('API Error:');
         console.error('API Error:', {
             url: error.config?.url,
             method: error.config?.method,
@@ -41,18 +42,10 @@ apiClient.interceptors.response.use(
 
 export const talentXApi = {
     auth: {
-        login: async (role: UserRole): Promise<User> => {
-            // For demo purposes, we still use a simplified login but hit the real backend
-            // In a real app, this would be a POST /auth/login with credentials
-            // Here we'll use a hardcoded demo account based on the role
-            let email = 'demo@example.com';
-            if (role === 'talent') email = 'michael@example.com';
-            if (role === 'agency') email = 'agency@example.com';
-            if (role === 'admin') email = 'admin@talentx.com';
-
+        login: async (email: string, password: string): Promise<{ user: User; token: string }> => {
             const response = await apiClient.post('/auth/login', {
                 email,
-                password: 'password123'
+                password
             });
 
             const { user, token } = response.data;
@@ -60,7 +53,17 @@ export const talentXApi = {
                 localStorage.setItem('talentx_user', JSON.stringify(user));
                 localStorage.setItem('talentx_token', token);
             }
-            return user;
+            return { user, token };
+        },
+        register: async (data: any): Promise<{ user: User; token: string }> => {
+            const response = await apiClient.post('/auth/register', data);
+
+            const { user, token } = response.data;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('talentx_user', JSON.stringify(user));
+                localStorage.setItem('talentx_token', token);
+            }
+            return { user, token };
         },
         me: async (): Promise<User> => {
             try {
@@ -87,17 +90,41 @@ export const talentXApi = {
             list: async (): Promise<(Talent & { id: string })[]> => {
                 const response = await apiClient.get('/talents');
                 return response.data;
+            },
+            getByUserId: async (userId: string): Promise<Talent & { id: string }> => {
+                const response = await apiClient.get(`/talents/user/${userId}`);
+                return response.data;
+            },
+            update: async (id: string, data: Partial<Talent>): Promise<Talent & { id: string }> => {
+                const response = await apiClient.patch(`/talents/${id}`, data);
+                return response.data;
             }
         },
         Agency: {
             list: async (): Promise<(Agency & { id: string })[]> => {
                 const response = await apiClient.get('/agencies');
                 return response.data;
+            },
+            getByUserId: async (userId: string): Promise<Agency & { id: string }> => {
+                const response = await apiClient.get(`/agencies/user/${userId}`);
+                return response.data;
+            },
+            update: async (id: string, data: Partial<Agency>): Promise<Agency & { id: string }> => {
+                const response = await apiClient.patch(`/agencies/${id}`, data);
+                return response.data;
             }
         },
         Team: {
             list: async (): Promise<(Team & { id: string })[]> => {
                 const response = await apiClient.get('/teams');
+                return response.data;
+            },
+            generate: async (data: { skills: string; team_size: number }): Promise<any> => {
+                const response = await apiClient.post('/teams/generate', data);
+                return response.data;
+            },
+            hire: async (data: { talentIds: string[]; projectId: string }): Promise<any> => {
+                const response = await apiClient.post('/teams/hire', data);
                 return response.data;
             }
         },
@@ -133,6 +160,14 @@ export const talentXApi = {
             update: async (id: string, data: Partial<Project>) => {
                 const response = await apiClient.patch(`/projects/${id}`, data);
                 return response.data;
+            },
+            recordPayment: async (data: { projectId: string; talentId: string; amount: number }) => {
+                const response = await apiClient.post('/projects/pay', data);
+                return response.data;
+            },
+            delete: async (id: string) => {
+                const response = await apiClient.delete(`/projects/${id}`);
+                return response.data;
             }
         },
         Task: {
@@ -151,30 +186,61 @@ export const talentXApi = {
             create: async (data: any) => {
                 const response = await apiClient.post('/tasks', data);
                 return response.data;
+            },
+            delete: async (id: string) => {
+                const response = await apiClient.delete(`/tasks/${id}`);
+                return response.data;
             }
         },
         Message: {
-            list: async (): Promise<Message[]> => {
-                const response = await apiClient.get('/messages');
+            list: async (query?: any): Promise<Message[]> => {
+                const response = await apiClient.get('/messages', { params: query });
                 return response.data;
             },
-            filter: async (query: any): Promise<Message[]> => {
-                const response = await apiClient.get('/messages');
-                return response.data;
-            },
-            create: async (data: any) => {
+            create: async (data: { receiver_id: string; content: string; isSupport?: boolean }) => {
                 const response = await apiClient.post('/messages', data);
+                return response.data;
+            },
+            getUnreadCount: async (): Promise<{ general: number; support: number }> => {
+                const response = await apiClient.get('/messages/unread-count');
+                return response.data;
+            },
+            markRead: async (data: { isSupport: boolean; threadUserId?: string }) => {
+                const response = await apiClient.post('/messages/mark-read', data);
                 return response.data;
             }
         },
         User: {
             list: async (): Promise<User[]> => {
-                // Not implemented in backend yet
-                return [
-                    { id: 'demo_client', email: 'demo@example.com', full_name: 'Demo Client', role: 'client', avatar_url: 'https://ui-avatars.com/api/?name=Demo+Client' },
-                    { id: '1', email: 'michael@example.com', full_name: 'Michael Torres', role: 'talent', avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=300&h=400&fit=crop' },
-                    { id: 'admin1', email: 'admin@talentx.com', full_name: 'Admin User', role: 'admin', avatar_url: 'https://ui-avatars.com/api/?name=Admin+User' }
-                ];
+                const response = await apiClient.get('/users');
+                return response.data;
+            },
+            getById: async (id: string): Promise<User> => {
+                const response = await apiClient.get(`/users/${id}`);
+                return response.data;
+            },
+            create: async (data: any) => {
+                const response = await apiClient.post('/users', data);
+                return response.data;
+            },
+            update: async (id: string, data: Partial<User>) => {
+                const response = await apiClient.patch(`/users/${id}`, data);
+                return response.data;
+            },
+            delete: async (id: string) => {
+                const response = await apiClient.delete(`/users/${id}`);
+                return response.data;
+            }
+        },
+        Notification: {
+            list: async (userId?: string): Promise<any[]> => {
+                const params = userId ? { userId } : {};
+                const response = await apiClient.get('/applications/notifications', { params });
+                return response.data;
+            },
+            markRead: async (id: string) => {
+                const response = await apiClient.patch(`/applications/notifications/${id}/read`);
+                return response.data;
             }
         }
     },
