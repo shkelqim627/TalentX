@@ -42,6 +42,23 @@ function BrowseTalentContent() {
   const itemsPerPage = 8;
 
   useEffect(() => {
+    const categoryFromUrl = searchParams.get("category");
+    const searchTermFromUrl = searchParams.get("searchTerm");
+
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl);
+    } else {
+      setSelectedCategory("all");
+    }
+
+    if (searchTermFromUrl) {
+      setSearchTerm(searchTermFromUrl);
+    } else {
+      setSearchTerm("");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     const fetchTalents = async () => {
       setLoading(true);
       try {
