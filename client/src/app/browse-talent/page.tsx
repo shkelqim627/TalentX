@@ -173,11 +173,10 @@ function BrowseTalentContent() {
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
                     whileHover={{ x: 2 }}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
-                      selectedCategory === cat.id
-                        ? "bg-[#204ecf] text-white shadow-lg shadow-[#204ecf]/25"
-                        : "text-gray-700 hover:bg-gray-50/80 hover:text-[#204ecf]"
-                    }`}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${selectedCategory === cat.id
+                      ? "bg-[#204ecf] text-white shadow-lg shadow-[#204ecf]/25"
+                      : "text-gray-700 hover:bg-gray-50/80 hover:text-[#204ecf]"
+                      }`}
                   >
                     {cat.label}
                   </motion.button>
