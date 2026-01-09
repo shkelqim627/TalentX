@@ -21,14 +21,16 @@ const testimonials = [
 
 export default function TestimonialsSection() {
     return (
-        <section className="py-24 bg-gray-50">
+        <section className="py-32 bg-[#fafafa]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-16">
-                    <h2 className="text-3xl font-bold text-[#1a1a2e]">What Our Clients Say</h2>
-                    <div className="mt-4 w-20 h-1 bg-[#204ecf] mx-auto rounded-full" />
+                <div className="text-center mb-24">
+                    <span className="text-[12px] font-black text-[#204ecf] uppercase tracking-[0.4em] mb-4 block underline underline-offset-8 decoration-2">
+                        EXECUTIVE FEEDBACK
+                    </span>
+                    <h2 className="text-[48px] font-bold text-[#1a1a2e] tracking-tight">What Our Partners Say</h2>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-12">
+                <div className="grid md:grid-cols-2 gap-8">
                     {testimonials.map((t, index) => (
                         <motion.div
                             key={t.author}
@@ -36,21 +38,22 @@ export default function TestimonialsSection() {
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
                             transition={{ duration: 0.5, delay: index * 0.1 }}
-                            className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 relative"
+                            className="p-12 bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:border-[#204ecf]/30 transition-all duration-500 group"
                         >
-                            <Quote className="absolute top-8 right-8 w-12 h-12 text-gray-100" />
-                            <p className="text-lg text-gray-600 italic mb-8 relative z-10">
+                            <Quote className="w-12 h-12 text-[#204ecf] mb-10 opacity-20 group-hover:opacity-40 transition-opacity" />
+                            <p className="text-[22px] text-[#1a1a2e] font-medium leading-relaxed mb-12 italic">
                                 "{t.quote}"
                             </p>
-                            <div className="flex items-center gap-4">
+
+                            <div className="flex items-center gap-6 pt-8 border-t border-gray-50">
                                 <img
                                     src={t.image}
                                     alt={t.author}
-                                    className="w-12 h-12 rounded-full object-cover"
+                                    className="w-16 h-16 grayscale group-hover:grayscale-0 transition-all duration-500 rounded-none object-cover"
                                 />
                                 <div>
-                                    <div className="font-bold text-[#1a1a2e]">{t.author}</div>
-                                    <div className="text-sm text-gray-500">{t.role}</div>
+                                    <div className="text-[18px] font-bold text-[#1a1a2e] tracking-tight">{t.author}</div>
+                                    <div className="text-[11px] text-gray-400 font-black uppercase tracking-[0.2em]">{t.role}</div>
                                 </div>
                             </div>
                         </motion.div>
