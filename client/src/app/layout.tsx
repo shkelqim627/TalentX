@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import ClientLayout from "@/components/ClientLayout";
-import Providers from "@/providers";
-import { Toaster } from "@/components/ui/toaster";
+import Providers from "@/providers/Providers";
+import ClientLayout from "@/shared/components/layout/ClientLayout";
 
 const proximaNova = localFont({
   src: [
@@ -46,40 +45,11 @@ export const metadata: Metadata = {
   authors: [{ name: "Incrosoft" }],
   creator: "Incrosoft",
   publisher: "Incrosoft",
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://talentx.incrosoft.com",
-    siteName: "TalentX",
-    title: "TalentX",
-    description: "Connect with verified talent, teams, and agencies through AI-powered matching.",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "TalentX - AI-First Talent Network",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "TalentX",
-    description: "Connect with verified talent, teams, and agencies through AI-powered matching.",
-    images: ["/og-image.jpg"],
-    creator: "@talentx",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
   icons: {
     icon: "/favicon.png",
     apple: "/favicon.png",
   },
 };
-
-import AuthInitializer from "@/components/auth/AuthInitializer";
 
 export default function RootLayout({
   children,
@@ -91,10 +61,8 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <ClientLayout>
-            <AuthInitializer />
             {children}
           </ClientLayout>
-          <Toaster />
         </Providers>
       </body>
     </html>

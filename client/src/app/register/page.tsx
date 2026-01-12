@@ -1,23 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/shared/components/ui/button";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { createPageUrl } from '@/utils';
-import { useDispatch } from 'react-redux';
-import { loginStart, loginSuccess, loginFailure } from '@/store/slices/authSlice';
-import { talentXApi } from '@/api/talentXApi';
+import { useAuthStore } from '@/features/auth/model/auth.store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, CreditCard, Shield, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
-import GuestGuard from '@/components/auth/GuestGuard';
+import { Check, CreditCard, Shield, Lock, ArrowRight } from 'lucide-react';
+import GuestGuard from '@/features/auth/ui/GuestGuard';
 
 function RegisterContent() {
     const searchParams = useSearchParams();
-    const dispatch = useDispatch();
+    const { register } = useAuthStore();
     const router = useRouter();
 
     const [step, setStep] = useState(1);
@@ -71,7 +68,6 @@ function RegisterContent() {
 
         try {
             setIsLoading(true);
-            dispatch(loginStart());
 
             // Register as Client
             const registrationData = {
@@ -79,22 +75,19 @@ function RegisterContent() {
                 password: formData.password,
                 full_name: formData.full_name,
                 role: 'client',
-                // Additional simulated data
+                // Additional simulated data (backend handles these specifically or ignores)
                 company_name: formData.companyName,
                 subscription_plan: selectedPlan
             };
 
-            const { user, token } = await talentXApi.auth.register(registrationData);
+            await register(registrationData);
 
-            dispatch(loginSuccess({ user, token }));
             toast.success(`Welcome to TalentX! Your ${selectedPlan} plan is active.`);
-
-            router.push(createPageUrl('Dashboard'));
+            router.push('/dashboard');
         } catch (error: any) {
             console.error('Registration failed:', error);
-            const message = error.response?.data?.message || 'Registration failed. Please try again.';
-            dispatch(loginFailure(message));
-            toast.error(message);
+            // Error handling is mainly done in store, but toast here for backup
+            // toast.error(error.message || 'Registration failed');
         } finally {
             setIsLoading(false);
         }
@@ -111,15 +104,12 @@ function RegisterContent() {
             {/* Header */}
             <header className="bg-white border-b border-gray-200 py-4">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                    <Link href={createPageUrl('Home')} className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-[#00c853] rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-sm">TX</span>
-                        </div>
+                    <Link href="/" className="flex items-center gap-2">
                         <span className="text-xl font-bold text-[#1a1a2e]">TalentX</span>
                     </Link>
                     <div className="text-sm text-gray-500">
                         Already have an account?{' '}
-                        <Link href={createPageUrl('Login')} className="text-[#204ecf] font-bold hover:underline">
+                        <Link href="/login" className="text-[#204ecf] font-bold hover:underline">
                             Log in
                         </Link>
                     </div>
@@ -196,9 +186,9 @@ function RegisterContent() {
                                     <div className="mt-8 pt-6 border-t border-gray-100 text-center">
                                         <p className="text-sm text-gray-600 mb-2">Are you a freelancer or agency?</p>
                                         <div className="flex justify-center gap-4 text-sm font-medium">
-                                            <Link href={createPageUrl('ApplyTalent')} className="text-[#204ecf] hover:underline">Apply as Talent</Link>
+                                            <Link href="/register?role=talent" className="text-[#204ecf] hover:underline">Apply as Talent</Link>
                                             <span className="text-gray-300">|</span>
-                                            <Link href={createPageUrl('ApplyAgency')} className="text-[#204ecf] hover:underline">Register Agency</Link>
+                                            <Link href="/register?role=agency" className="text-[#204ecf] hover:underline">Register Agency</Link>
                                         </div>
                                     </div>
                                 </motion.div>

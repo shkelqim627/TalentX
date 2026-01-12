@@ -20,5 +20,5 @@ This repository contains proprietary and confidential information. Access is gra
 
 ---
 
-© 2025-2026 Incrosoft. All rights reserved.
+© 2026 Incrosoft. All rights reserved.
 

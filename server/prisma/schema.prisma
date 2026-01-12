@@ -29,6 +29,18 @@ model User {
   tasks      Task[]    @relation("AssignedTasks")
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
+  auditLogs        AuditLog[] @relation("AdminActions")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  adminId    String?
+  admin      User?     @relation("AdminActions", fields: [adminId], references: [id])
+  action     String   // e.g., 'CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE'
+  entityType String   // e.g., 'Project', 'User', 'CaseStudy', 'Talent', 'Agency', 'BlogPost', 'FAQ', 'Testimonial', 'HireRequest', 'Application'
+  entityId   String?
+  details    String?  // JSON string
+  createdAt  DateTime @default(now())
 }
 
 model Talent {
@@ -150,6 +162,10 @@ model Project {
   srs_file_url String?
   design_diagram_url String?
 
+  clientReview  String?  @db.Text
+  clientRating  Int?
+  paymentStatus String   @default("pending") // 'pending' | 'released'
+
   tasks        Task[]
   memberships  ProjectMembership[]
 }
@@ -246,4 +262,56 @@ model Application {
   resume_url        String?
   status            String   @default("pending") // 'pending' | 'reviewing' | 'accepted' | 'rejected'
   applied_at        DateTime @default(now())
+}
+
+model FAQ {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
+  category  String?  // 'developer' | 'designer' | 'general'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Testimonial {
+  id        String   @id @default(uuid())
+  headline  String
+  quote     String
+  author    String
+  role      String
+  company   String
+  logo      String?  // URL
+  rating    Int      @default(5)
+  createdAt DateTime @default(now())
+}
+
+model CaseStudy {
+  id                String   @id @default(uuid())
+  title             String
+  image             String
+  logo              String?  // Text or URL
+  color             String   @default("from-blue-900/40")
+  client_name       String?
+  project_goals     String?  @db.Text
+  tech_stack        String?  // JSON string
+  outcomes          String?  @db.Text
+  video_url         String?  // YouTube video URL
+  content           String?  @db.Text // Content / Story
+  createdAt         DateTime @default(now())
+}
+
+model BlogPost {
+  id        String   @id @default(uuid())
+  title     String
+  excerpt   String
+  content   String   @db.Text
+  author    String
+  category  String
+  image     String
+  readTime  String?
+  slug      String   @unique
+  featured  Boolean  @default(false)
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
